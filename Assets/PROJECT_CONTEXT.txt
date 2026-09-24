@@ -1,0 +1,110 @@
+================================================================================
+PROJECT CONTEXT & ARCHITECTURAL DIRECTIVES
+Woodsmen: Co-Op Multiplayer (Lumberjack & Warrior)
+================================================================================
+
+1. PROJECT OVERVIEW & GAME VISION
+--------------------------------------------------------------------------------
+- Genre: Co-Op Multiplayer Action & Survival / Resource Gathering.
+- Core Fantasy: 
+  * Lumberjack: Focuses on environmental interaction, cutting trees, gathering wood, clearing paths, building/crafting, and harvesting raw materials.
+  * Warrior: Focuses on protecting the team, fighting AI monster hordes, melee combat, crowd control, and defending the gatherer.
+  * Shared Loop: Players collect materials (wood, monster drops, minerals) to craft and upgrade weapons, tools, and defenses in a shared synchronized world.
+
+2. CORE ARCHITECTURAL PILLARS & TECH STACK
+--------------------------------------------------------------------------------
+- Networking: Mirror Networking
+  * Server-authoritative logic with responsive client-side interpolation/prediction.
+  * Efficient NetworkTransform / NetworkAnimator or custom synced state to minimize bandwidth.
+- Locomotion System: Pure Script / Code-Driven (NO Root Motion)
+  * Script/physics-based movement (CharacterController or Rigidbody with deterministic math).
+  * Eliminates Root Motion bandwidth synchronization bloat and ensures tight, responsive controls.
+  * Maximizes crowd scalability for dozens of AI enemies chasing players simultaneously.
+- AI & Pathfinding: Pre-Baked NavMesh + Dynamic NavMeshObstacle Carving
+  * NavMesh baked once on a flat ground plane.
+  * Destructible objects (e.g. trees, rocks, barricades) use NavMeshObstacle with 'Carve = true'.
+  * Zero runtime NavMesh rebaking: cutting a tree opens holes in the NavMesh dynamically and cheaply.
+- Interaction Feedback & Procedural Animation: PrimeTween
+  * Physical impacts and hit reactions use procedural squash-and-stretch and scaling via PrimeTween.
+  * Eliminates bloated, sluggish Animator state machines for simple hit/impact/harvest reactions.
+- Visual Effects & Object Pooling: Zero-GC Ring Buffer VFXManager
+  * Pre-warmed circular pools for impact VFX (wood splinters, dust puffs, combat hits).
+  * Hierarchical playback (`Play(withChildren: true)`) ensuring composite parent/child particle systems fire synchronously.
+  * Fully decoupled from world props (zero manual scene references required on environment prefabs).
+- Combat & Harvesting Hitbox System: Universal WeaponHitbox
+  * Dedicated modular hitbox component (`WeaponHitbox.cs`) and integrated fallback options on characters.
+  * Supports Sphere and Box geometries, local center offsets, Euler rotation alignment, and bone socket anchoring.
+  * Real-time Scene view gizmo visualizations (active/inactive states) and non-allocating physics overlap queries.
+- Camera & Screen Shake: Cinemachine + Cinemachine Impulse
+  * Cinemachine Virtual Cameras for dynamic framing.
+  * Cinemachine Impulse for camera shakes triggered via 6DOF Perlin noise.
+  * Overlapping shakes resolve natively without manual coroutine overhead.
+
+3. STRICT OPTIMIZATION DIRECTIVES
+--------------------------------------------------------------------------------
+- [Rule 1] NO standard Coroutines (IEnumerator) for mathematical updates, timers, or camera shakes. Use PrimeTween or tick updates.
+- [Rule 2] NO runtime NavMesh rebaking. Always use pre-baked meshes with dynamic NavMeshObstacle carving.
+- [Rule 3] NO Root Motion for standard movement. Keep locomotion purely script/math-driven for network determinism and low overhead.
+- [Rule 4] Procedural animations (PrimeTween) over Animator states for hit reactions, object scaling, squash & stretch, and color flashes.
+- [Rule 5] Zero/minimal Garbage Collection (GC) in hot loops (Update/FixedUpdate/Network updates). Cache non-allocating queries (e.g., Physics.OverlapSphereNonAlloc).
+- [Rule 6] Input System Architecture: Exclusively use Unity's New Input System Action Maps. NEVER use legacy `Input.GetKeyDown`, `Input.GetAxis`, or polling.
+- [Rule 7] Defensive Component Retrieval: Avoid direct unchecked `GetComponent` / `GetComponentInParent`. Always use `TryGetComponent` or null-safe retrieval patterns to gracefully handle missing references.
+- [Rule 8] Memory & Allocation Discipline: Cache references in `Awake`/`Start`, unsubscribe from events and disable/dispose Input Actions in `OnDisable`/`OnDestroy` to prevent memory leaks, and free/pool allocations wherever possible.
+- [Rule 9] Universal Action Input Mapping: Characters share standard top-down inputs (`Move`, `Look`, `PrimaryAction`, `SecondaryAction`). Specific role logic (e.g. Lumberjack chopping vs Warrior attacking) hooks into these shared actions rather than creating fragmented action maps.
+- [Rule 10] Preserve Manual Developer Control: NEVER use `[InitializeOnLoadMethod]` or automatic domain reload hooks that overwrite Animator Controllers, Avatar Masks, Prefabs, or Scene Assets. Setup utilities must be strictly explicit via `[MenuItem]` so the developer retains 100% control over fine-tuned adjustments.
+- [Rule 11] Mandatory Object Pooling for Transient Assets: NEVER use runtime Instantiate() / Destroy() for frequently spawned or transient objects (visual effects, particle systems, audio one-shots, projectiles, damage numbers, dropped resource pickups). Always pre-warm and reuse instances using dedicated, zero-GC object pools (e.g. VFXManager, circular ring buffers, or UnityEngine.Pool) to eliminate Garbage Collection spikes, prevent frame-rate hitching, and decouple scene dependencies.
+- [Rule 12] Server-Authoritative Health & Combat Architecture: Character health, damage calculation, and death states must be server-authoritative (`isServer`) with client synchronization via Mirror `[SyncVar]` hooks and `[ClientRpc]` event dispatches. Always provide defensive offline/single-player fallbacks (`!NetworkClient.active && !NetworkServer.active`) so characters and combat actions are 100% testable in any scene without network hosting (Rule 3). All damageable entities (players, trees, monsters, destructibles) must implement `IDamageable` for unified combat routing. Screen shakes and camera feedback must be strictly isolated to the damaged player (`isLocalPlayer`).
+
+4. CLI & TOOLING ENVIRONMENT SETUP
+--------------------------------------------------------------------------------
+- Machine & Project CLI Enabled:
+  * The machine and project environment are configured with CLI capabilities (PowerShell, Unity CLI via `unity.exe`, scripting tools).
+  * Enables fast automated command execution, asset management, code verification, compilation checking, and batch workflows without relying solely on manual editor clicks.
+  * Direct CLI accessibility accelerates development speed and keeps iteration feedback loops short.
+
+5. DIRECTORY & CODE STRUCTURE
+--------------------------------------------------------------------------------
+- Assets/
+  ├── Mirror/                 -> Mirror Networking framework
+  ├── Plugins/PrimeTween/     -> High-performance tweening library
+  ├── Players/
+  │   ├── Lumberjack/         -> Lumberjack prefabs, tools, models, FX_Impact_Wood_Ztest 8.prefab
+  │   ├── Warrior/            -> Warrior prefabs, weapons, models
+  │   ├── Universal Scripts/  -> Shared player controller, network sync, ComponentExtensions
+  │   └── Locomotion Animations/
+  ├── Scripts/                -> Core gameplay systems (AI, Environment, Combat, Feedback)
+  │   ├── Network/            -> Network managers, room/game setup
+  │   ├── Environment/        -> Destructible trees, terrain spawner, carving
+  │   ├── Combat/             -> IDamageable, CharacterHealth, WeaponHitbox
+  │   ├── AI/                 -> Chasing monster behavior, NavMesh agent logic
+  │   ├── Feedback/           -> VFXManager (particle pooling), PrimeTween squash/stretch
+  │   └── Camera/             -> CameraManager (Cinemachine 3, Impulse shakes, procedural zoom)
+  ├── Scenes/
+  │   └── Gameplay Scene.unity
+  └── PROJECT_CONTEXT.txt     -> (This document)
+
+6. DEVELOPMENT ROADMAP
+--------------------------------------------------------------------------------
+[X] Phase 1: Core Networked Locomotion (Mirror + Script-driven decoupled movement for Lumberjack & Warrior, New Input System, 8-way 2D BlendTree).
+[X] Phase 2: Cinemachine 3 Framing & PrimeTween CameraManager (Multiplayer-isolated Impulse shakes, distance falloff, procedural zoom).
+[X] Phase 3: Dynamic Environment & Tree Chopping (Destructible Tree + NavMesh Obstacle Carving + PrimeTween Squash/Stretch + VFXManager Dual-Particle Pooling + Sequenced UpperBody Chopping + Terrain Spawner).
+[X] Phase 4: Combat System & Character Health (IDamageable universal interface, Mirror server-authoritative CharacterHealth, ClientRpc hit/death dispatch, procedural PrimeTween punch & MaterialPropertyBlock flash, unified weapon damage).
+[ ] Phase 5: Scalable AI Monster System (Pre-baked NavMesh, dynamic carving reaction, high-density chase logic).
+[ ] Phase 6: Inventory, Upgrades, & Shared Economy (Collecting materials, upgrading tools/weapons).
+
+7. CHANGELOG & PROGRESS
+--------------------------------------------------------------------------------
+- [Initialized] Created PROJECT_CONTEXT.txt tracking game vision, core architecture, optimization directives, CLI environment setup, and development roadmap.
+- [Phase 1 Locomotion] Implemented universal LocomotionController, PlayerInputReader (New Input System action maps), ComponentExtensions, and 8-way 2D Freeform BlendTree with offline testing support.
+- [Phase 2 Camera System] Implemented CameraManager with Cinemachine 3, multiplayer-isolated Cinemachine Impulse shakes (zero coroutines), PrimeTween procedural zooms, and 1-click scene camera configuration utility.
+- [Phase 3 Lumberjack Chopping & Destructible Trees] Implemented dual-swing sequenced attack layer on UpperBody mask, animation events (EnableTreeHitbox / DisableTreeHitbox), zero-GC overlap sphere scanning, DestructibleTree with NavMeshObstacle carving, PrimeTween wobble & Cinemachine impulse feedback, and automatic editor/runtime setup.
+- [Phase 3 Action Pacing & Upgrades API] Added animation speed multiplier (`ChopSpeedMultiplier`), recovery cooldown period (`ChopCooldown`), alternating sequence indexing (`ChopIndex`), and public inspection API (`CooldownNormalized`, `IsOnCooldown`) ready for future upgrade systems.
+- [Phase 3 Customizable Weapon Hitbox] Implemented `WeaponHitbox.cs` supporting Sphere and Box shapes, local offsets, rotation, socket bone anchoring, non-alloc overlap physics queries, and live Scene-view Gizmos. Fully integrated into `LumberjackChopping`.
+- [Phase 3 Hit Deduplication Fix] Resolved multi-hit issue where a single swing triggered multiple hit events. Replaced per-collider caching with per-tree instance tracking (`HashSet<int> _hitTreeIdsThisSwing`), prevented premature cache clearing during active swing cycles, and added target-side debounce protection (`hitDebounceTime = 0.15f`) on `DestructibleTree`.
+- [Phase 3 VFX Pooling & Dual Particle Playback] Implemented `VFXManager` (Zero-GC ring pool) for `FX_Impact_Wood_Ztest 8.prefab`. Ensured simultaneous playback across both parent (wood splinters) and child (dust puff) ParticleSystems via `Play(withChildren: true)`. Decoupled `DestructibleTree` so trees no longer require scene-object wiring.
+- [Environment Lighting, Post-Processing & Terrain] Implemented `Woodsmen_PostProcess_Profile.asset` (ACES tonemapping, vibrant color grading, subtle bloom, vignette, FXAA), warm golden directional sunlight with soft shadows, atmospheric linear fog, three stylized TerrainLayers (`Grass_Layer`, `Dirt_Layer`, `Rock_Layer`), and 1-click procedural terrain sculpting (`EnvironmentLightingSetup.cs`) with flat core clearing and natural boundary mounds.
+- [Phase 3 Multi-Terrain Destructible Tree Spawner & GPU Instancing] Implemented `TerrainTreeSpawner.cs` and `TerrainTreeSpawnerEditor.cs` for multi-terrain level design. Features configurable per-terrain tree counts/density, safe clearing exclusion zones (player spawn), slope steepness rejection (cliff avoidance), Poisson-style minimum spacing anti-clumping, and organic scale/rotation variation. Enabled GPU Instancing on `SimpleNaturePack_Texture_01.mat` for single-draw-call rendering of hundreds of trees. Retains full persistence without offscreen entity destruction (leveraging hardware frustum culling and LODGroups) so chopped states and NavMesh obstacles are permanently remembered.
+- [Phase 3 Standard Tree Health & Damage System] Refactored tree health and destruction from fixed hit counts to a standard numerical health pool (`maxHealth = 100f`, `currentHealth`). Configured `LumberjackChopping` with customizable `chopDamage = 25f` (with public `ChopDamage` upgrade API) and added generic `TakeDamage(float damage, Vector3 hitPoint)` and `OnHealthChanged` event to `DestructibleTree` for seamless compatibility with future weapons, combat actions, tools, and UI health bars.
+- [Phase 4 Character Health & Mirror Combat System] Implemented `IDamageable.cs` universal interface and `CharacterHealth.cs` network component for players, AI, and monsters. Features server-authoritative health management with `[SyncVar]` hooks, `[ClientRpc]` hit/death dispatches, offline single-player fallback (Rule 3), Animator parameter synchronization (`Hit`, `Death`, `IsDead`), procedural squash-and-stretch wobble (PrimeTween), zero-GC `MaterialPropertyBlock` damage flash, local player camera shake isolation, and full death shutdown. Integrated `IDamageable` across `DestructibleTree`, `CharacterHealth`, `LocomotionController`, and `LumberjackChopping`.
+================================================================================
+
