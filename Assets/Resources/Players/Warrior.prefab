@@ -5573,6 +5573,7 @@ GameObject:
   - component: {fileID: 3860879574426659918}
   - component: {fileID: 598171341292601811}
   - component: {fileID: 8430227367611601059}
+  - component: {fileID: 4083625260676852137}
   m_Layer: 3
   m_Name: Warrior
   m_TagString: Untagged
@@ -5824,6 +5825,23 @@ MonoBehaviour:
     visualCrossbowPrefab: {fileID: 0}
   weaponSocket: {fileID: 7183259108932523362}
   boltPrefab: {fileID: 3106798879807985148, guid: d7dd389ec0db7264680c60e7c60b9365, type: 3}
+--- !u!114 &4083625260676852137
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7535718809190126084}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 396bcf02ff73f5c49b80501eaf943c48, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Woodsmen.Combat.PlayerReviveInteraction
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  reviveRange: 2
+  reviveHealthPercent: 0.15
 --- !u!1 &7585112150536574777
 GameObject:
   m_ObjectHideFlags: 0

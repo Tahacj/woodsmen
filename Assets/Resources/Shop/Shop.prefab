@@ -137,7 +137,7 @@ MonoBehaviour:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
-  interactionRadius: 4.72
+  interactionRadius: 2.8
   interactionCenter: {fileID: 7079741736273211653}
   openPrompt: Open Gate
   closePrompt: Close Gate
@@ -977,9 +977,6 @@ PrefabInstance:
       addedObject: {fileID: 4383015824567207106}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 466085ec027451e4ba10f5b5a7fbbdf2, type: 3}
       insertIndex: -1
-      addedObject: {fileID: 41440937925737177}
-    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 466085ec027451e4ba10f5b5a7fbbdf2, type: 3}
-      insertIndex: -1
       addedObject: {fileID: 6955296927801851378}
   m_SourcePrefab: {fileID: 100100000, guid: 466085ec027451e4ba10f5b5a7fbbdf2, type: 3}
 --- !u!1 &4700564653529507335 stripped
@@ -1024,27 +1021,6 @@ NavMeshObstacle:
   m_CarveOnlyStationary: 1
   m_Center: {x: 0, y: 0, z: -2.31}
   m_TimeToStationary: 0.5
---- !u!65 &41440937925737177
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4700564653529507335}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_IsTrigger: 1
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Size: {x: 4.55, y: 1.98, z: 3.13}
-  m_Center: {x: 0, y: 0, z: 0}
 --- !u!114 &6955296927801851378
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1066,7 +1042,7 @@ MonoBehaviour:
   - {fileID: 11400000, guid: 11112222333344445555666677778887, type: 2}
   - {fileID: 11400000, guid: 38008a924b695d94887a087088ad238c, type: 2}
   interactionCenter: {fileID: 0}
-  fallbackInteractionRadius: 4.5
+  fallbackInteractionRadius: 3.6
   linkedGate: {fileID: 0}
   audioSource: {fileID: 0}
   openShopSound: {fileID: 0}

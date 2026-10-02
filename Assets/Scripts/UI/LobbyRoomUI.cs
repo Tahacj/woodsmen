@@ -60,12 +60,17 @@ namespace Woodsmen.UI
         {
             WoodsmenLobbyPlayer.OnLobbyPlayersUpdated += RefreshPlayerList;
             RefreshPlayerList();
+            
+            // Backup confirmation layer: auto-refresh to catch delayed network spawns
+            InvokeRepeating(nameof(RefreshPlayerList), 1.5f, 1.5f);
+
             if (copyFeedbackText != null) copyFeedbackText.gameObject.SetActive(false);
         }
 
         private void OnDisable()
         {
             WoodsmenLobbyPlayer.OnLobbyPlayersUpdated -= RefreshPlayerList;
+            CancelInvoke(nameof(RefreshPlayerList));
         }
 
         private void OnDestroy()
@@ -145,6 +150,17 @@ namespace Woodsmen.UI
         public void RefreshPlayerList()
         {
             WoodsmenLobbyPlayer.SanitizePlayersList();
+
+            // Confirmation layer: Catch any players that were spawned but missed the static list registration
+            var scenePlayers = FindObjectsByType<WoodsmenLobbyPlayer>(FindObjectsSortMode.None);
+            foreach (var p in scenePlayers)
+            {
+                if (p != null && !WoodsmenLobbyPlayer.AllPlayers.Contains(p))
+                {
+                    WoodsmenLobbyPlayer.AllPlayers.Add(p);
+                }
+            }
+
             var players = WoodsmenLobbyPlayer.AllPlayers;
             int count = players.Count;
 

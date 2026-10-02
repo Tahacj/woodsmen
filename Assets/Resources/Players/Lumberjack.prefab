@@ -3165,6 +3165,7 @@ GameObject:
   - component: {fileID: -3109568686200095921}
   - component: {fileID: 5151538312258746736}
   - component: {fileID: 5324896069095970058}
+  - component: {fileID: -2422936975226247544}
   m_Layer: 3
   m_Name: Lumberjack
   m_TagString: Untagged
@@ -3426,6 +3427,23 @@ MonoBehaviour:
   maxSlots: 24
   startingWood: 0
   startingMoney: 0
+--- !u!114 &-2422936975226247544
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6006075483565936344}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 396bcf02ff73f5c49b80501eaf943c48, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Woodsmen.Combat.PlayerReviveInteraction
+  syncDirection: 0
+  syncMode: 0
+  syncInterval: 0
+  reviveRange: 2
+  reviveHealthPercent: 0.15
 --- !u!1 &6121071305057142321
 GameObject:
   m_ObjectHideFlags: 0
@@ -6319,12 +6337,28 @@ PrefabInstance:
     m_TransformParent: {fileID: 5780470932130851272}
     m_Modifications:
     - target: {fileID: 5427737566861903639, guid: 4207369e194e6794c87bb6e4cea2cfa3, type: 3}
+      propertyPath: shape
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 5427737566861903639, guid: 4207369e194e6794c87bb6e4cea2cfa3, type: 3}
       propertyPath: radius
-      value: 0.79
+      value: 0.97
+      objectReference: {fileID: 0}
+    - target: {fileID: 5427737566861903639, guid: 4207369e194e6794c87bb6e4cea2cfa3, type: 3}
+      propertyPath: boxSize.x
+      value: 0.74
+      objectReference: {fileID: 0}
+    - target: {fileID: 5427737566861903639, guid: 4207369e194e6794c87bb6e4cea2cfa3, type: 3}
+      propertyPath: boxSize.y
+      value: 1.88
+      objectReference: {fileID: 0}
+    - target: {fileID: 5427737566861903639, guid: 4207369e194e6794c87bb6e4cea2cfa3, type: 3}
+      propertyPath: boxSize.z
+      value: 0.93
       objectReference: {fileID: 0}
     - target: {fileID: 5427737566861903639, guid: 4207369e194e6794c87bb6e4cea2cfa3, type: 3}
       propertyPath: centerOffset.y
-      value: 0.55
+      value: 0.4
       objectReference: {fileID: 0}
     - target: {fileID: 6026935610318845023, guid: 4207369e194e6794c87bb6e4cea2cfa3, type: 3}
       propertyPath: m_Name
