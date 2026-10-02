@@ -68,10 +68,14 @@ namespace Woodsmen.Combat
         private CharacterController _characterController;
         private LocomotionController _locomotionController;
         private LumberjackChopping _choppingController;
+        private Woodsmen.Combat.Weapons.ICombatController _combatController;
         private Vector3 _originalScale;
         private Tween _punchTween;
         private Tween _flashTween;
         private MaterialPropertyBlock _propBlock;
+
+        // Persistent tint state (e.g. for long-lasting debuffs like Frost)
+        private Color? _persistentTintColor = null;
 
         // Cached Animator Parameter Hashes
         private int _hitTriggerHash;
@@ -128,6 +132,7 @@ namespace Woodsmen.Combat
             gameObject.TryGetComponent(out _characterController);
             gameObject.TryGetComponent(out _locomotionController);
             gameObject.TryGetComponent(out _choppingController);
+            gameObject.TryGetComponent(out _combatController);
 
             if (audioSource == null)
             {
@@ -263,6 +268,11 @@ namespace Woodsmen.Combat
                 HandleDeath(Vector3.zero);
                 OnDeath?.Invoke();
             }
+            else if (!newDead && oldDead)
+            {
+                HandleRevive();
+                OnRevived?.Invoke();
+            }
         }
 
         [ClientRpc]
@@ -349,15 +359,51 @@ namespace Woodsmen.Combat
                 flashRenderers[i].SetPropertyBlock(_propBlock);
             }
 
-            // Smoothly clear back to default
+            // Smoothly clear back to default OR persistent tint
             _flashTween = Tween.Delay(flashDuration, () =>
             {
                 for (int i = 0; i < flashRenderers.Length; i++)
                 {
                     if (flashRenderers[i] == null) continue;
-                    flashRenderers[i].SetPropertyBlock(null);
+                    
+                    if (_persistentTintColor.HasValue)
+                    {
+                        flashRenderers[i].GetPropertyBlock(_propBlock);
+                        _propBlock.SetColor(BaseColorHash, _persistentTintColor.Value);
+                        flashRenderers[i].SetPropertyBlock(_propBlock);
+                    }
+                    else
+                    {
+                        flashRenderers[i].SetPropertyBlock(null);
+                    }
                 }
             });
+        }
+
+        public void ApplyPersistentTint(Color color)
+        {
+            _persistentTintColor = color;
+            if (_flashTween.isAlive) return; // If currently flashing damage, let it finish and it will revert to this tint
+
+            for (int i = 0; i < flashRenderers.Length; i++)
+            {
+                if (flashRenderers[i] == null) continue;
+                flashRenderers[i].GetPropertyBlock(_propBlock);
+                _propBlock.SetColor(BaseColorHash, color);
+                flashRenderers[i].SetPropertyBlock(_propBlock);
+            }
+        }
+
+        public void ClearPersistentTint()
+        {
+            _persistentTintColor = null;
+            if (_flashTween.isAlive) return; // If currently flashing damage, let it finish and it will revert to null
+
+            for (int i = 0; i < flashRenderers.Length; i++)
+            {
+                if (flashRenderers[i] == null) continue;
+                flashRenderers[i].SetPropertyBlock(null);
+            }
         }
 
         private void HandleDeath(Vector3 deathDirection)
@@ -378,7 +424,10 @@ namespace Woodsmen.Combat
             // 2. Disable Locomotion & Collision
             if (_locomotionController != null) _locomotionController.enabled = false;
             if (_choppingController != null) _choppingController.enabled = false;
+            if (_combatController is MonoBehaviour combatMb) combatMb.enabled = false;
             if (_characterController != null) _characterController.enabled = false;
+            if (TryGetComponent(out UnityEngine.AI.NavMeshAgent navAgent)) navAgent.enabled = false;
+            if (TryGetComponent(out Collider col)) col.enabled = false;
 
             // 3. Audio Death Feedback
             if (audioSource != null && deathAudioClip != null)
@@ -399,7 +448,7 @@ namespace Woodsmen.Combat
         /// </summary>
         public void Heal(float amount)
         {
-            if (_isDead) return;
+            if (_isDead || amount <= 0f) return;
 
             if (isServer)
             {
@@ -410,6 +459,17 @@ namespace Woodsmen.Combat
                 _currentHealth = Mathf.Min(maxHealth, _currentHealth + amount);
                 OnHealthChanged?.Invoke(_currentHealth, maxHealth);
             }
+            else if (isLocalPlayer)
+            {
+                CmdHeal(amount);
+            }
+        }
+
+        [Command]
+        private void CmdHeal(float amount)
+        {
+            if (_isDead || amount <= 0f) return;
+            _currentHealth = Mathf.Min(maxHealth, _currentHealth + amount);
         }
 
         /// <summary>
@@ -417,39 +477,56 @@ namespace Woodsmen.Combat
         /// </summary>
         public void Revive(float healthPercent = 1.0f)
         {
-            if (isServer)
+            _isDead = false;
+            _currentHealth = Mathf.Clamp(maxHealth * healthPercent, 1f, maxHealth);
+
+            HandleRevive();
+            OnHealthChanged?.Invoke(_currentHealth, maxHealth);
+            OnRevived?.Invoke();
+
+            if (NetworkServer.active)
             {
-                _isDead = false;
-                _currentHealth = Mathf.Clamp(maxHealth * healthPercent, 1f, maxHealth);
                 RpcOnRevived();
-            }
-            else if (!NetworkClient.active && !NetworkServer.active)
-            {
-                _isDead = false;
-                _currentHealth = Mathf.Clamp(maxHealth * healthPercent, 1f, maxHealth);
-                HandleRevive();
-                OnHealthChanged?.Invoke(_currentHealth, maxHealth);
-                OnRevived?.Invoke();
             }
         }
 
         [ClientRpc]
         private void RpcOnRevived()
         {
-            HandleRevive();
-            OnRevived?.Invoke();
+            // Remote clients receive this RPC to restore visual and collision states
+            if (!isServer)
+            {
+                HandleRevive();
+                OnRevived?.Invoke();
+            }
         }
 
         private void HandleRevive()
         {
-            if (_animator != null && _hasIsDeadBool)
+            _isDead = false;
+
+            if (_animator != null)
             {
-                _animator.SetBool(_isDeadBoolHash, false);
+                if (_hasIsDeadBool)
+                {
+                    _animator.SetBool(_isDeadBoolHash, false);
+                }
+                if (_hasDeathTrigger)
+                {
+                    _animator.ResetTrigger(_deathTriggerHash);
+                }
+                if (_hasHitTrigger)
+                {
+                    _animator.ResetTrigger(_hitTriggerHash);
+                }
             }
 
             if (_characterController != null) _characterController.enabled = true;
             if (_locomotionController != null) _locomotionController.enabled = true;
             if (_choppingController != null) _choppingController.enabled = true;
+            if (_combatController is MonoBehaviour combatMb) combatMb.enabled = true;
+            if (TryGetComponent(out UnityEngine.AI.NavMeshAgent navAgent)) navAgent.enabled = true;
+            if (TryGetComponent(out Collider col)) col.enabled = true;
 
             Debug.Log($"<color=#50fa7b><b>[Woodsmen]</b> Character '{gameObject.name}' has been revived.</color>");
         }

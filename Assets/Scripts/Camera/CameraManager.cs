@@ -1,4 +1,4 @@
-using PrimeTween;
+﻿using PrimeTween;
 using Unity.Cinemachine;
 using UnityEngine;
 using Woodsmen.Utilities;
@@ -8,7 +8,7 @@ namespace Woodsmen.CameraSystem
     /// <summary>
     /// Centralized Camera Manager and Brain for the top-down perspective.
     /// Manages CinemachineCamera framing, smooth target tracking for the local player,
-    /// and provides multiplayer-isolated camera shakes via Cinemachine Impulse (No Coroutines).
+    /// and provides high-performance, multiplayer-isolated camera shakes via PrimeTween and Cinemachine Impulse (Zero GC).
     /// </summary>
     public class CameraManager : MonoBehaviour
     {
@@ -34,7 +34,29 @@ namespace Woodsmen.CameraSystem
         [Tooltip("Follow lag/smoothness. 0 = rigid lock, 0.3 to 0.5 = smooth cinematic easing.")]
         [SerializeField] private Vector3 followDamping = new Vector3(0.3f, 0.3f, 0.3f);
 
-        [Header("Shake Presets (Impulse Forces)")]
+        [Header("PrimeTween Procedural Camera Shake (Zero-GC)")]
+        [Tooltip("Use PrimeTween procedural shake on Cinemachine FollowOffset (lightweight, zero noise-asset dependencies, 100% reliable).")]
+        [SerializeField] private bool usePrimeTweenShake = true;
+
+        [Tooltip("Tree hit camera shake intensity (recoil offset in meters).")]
+        [SerializeField] private float treeHitIntensity = 0.22f;
+
+        [Tooltip("Tree hit camera shake duration in seconds.")]
+        [SerializeField] private float treeHitDuration = 0.15f;
+
+        [Tooltip("Tree collapse thud shake intensity.")]
+        [SerializeField] private float treeFellIntensity = 0.50f;
+
+        [Tooltip("Tree collapse thud shake duration in seconds.")]
+        [SerializeField] private float treeFellDuration = 0.30f;
+
+        [Tooltip("Player damaged shake intensity.")]
+        [SerializeField] private float playerDamagedIntensity = 0.45f;
+
+        [Tooltip("Vibration frequency (oscillations per second). Higher = sharper impact vibration.")]
+        [SerializeField] private int defaultShakeFrequency = 22;
+
+        [Header("Cinemachine Impulse Presets (Fallback/Layer)")]
         [SerializeField] private float treeHitForce = 0.35f;
         [SerializeField] private float treeFellForce = 1.0f;
         [SerializeField] private float combatHitForce = 0.5f;
@@ -42,6 +64,7 @@ namespace Woodsmen.CameraSystem
 
         private Transform _currentTarget;
         private Tween _zoomTween;
+        private Tween _shakeTween;
 
         public Transform CurrentTarget => _currentTarget;
 
@@ -73,10 +96,8 @@ namespace Woodsmen.CameraSystem
 
         private void OnDestroy()
         {
-            if (_zoomTween.isAlive)
-            {
-                _zoomTween.Stop();
-            }
+            if (_zoomTween.isAlive) _zoomTween.Stop();
+            if (_shakeTween.isAlive) _shakeTween.Stop();
 
             if (Instance == this)
             {
@@ -181,14 +202,69 @@ namespace Woodsmen.CameraSystem
 
         #endregion
 
-        #region Screen Shake (Multiplayer Filtered - No Coroutines)
+        #region Screen Shake (PrimeTween & Cinemachine Impulse)
 
         /// <summary>
-        /// Triggers a strictly local camera shake.
-        /// Remote actions do NOT trigger this, ensuring other players' actions don't shake your screen.
+        /// PrimeTween Procedural Camera Shake (Zero GC, 100% reliable, zero asset dependencies).
+        /// Oscillates the Cinemachine FollowOffset with a decaying damped harmonic sine wave.
+        /// </summary>
+        public void ShakePrimeTween(float intensity = 0.22f, float duration = 0.15f, int frequency = 22, Vector3 direction = default)
+        {
+            if (cinemachineFollow == null) return;
+
+            if (_shakeTween.isAlive)
+            {
+                _shakeTween.Stop();
+            }
+
+            // Planar recoil direction (default to random angle if zero)
+            if (direction == default || direction.sqrMagnitude < 0.001f)
+            {
+                float angle = Random.Range(0f, Mathf.PI * 2f);
+                direction = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+            }
+            else
+            {
+                direction.y = 0f;
+                direction.Normalize();
+            }
+
+            Vector3 baseOffset = followOffset;
+            baseOffset.y = cinemachineFollow.FollowOffset.y; // Preserve active zoom level
+
+            Vector3 perpDirection = new Vector3(-direction.z, 0f, direction.x);
+
+            _shakeTween = Tween.Custom(0f, 1f, duration: duration, onValueChange: progress =>
+            {
+                if (cinemachineFollow == null) return;
+
+                float decay = 1f - progress;
+                float sine = Mathf.Sin(progress * frequency * Mathf.PI);
+                float perpSine = Mathf.Cos(progress * frequency * 1.3f * Mathf.PI) * 0.4f;
+
+                Vector3 shakeDelta = (direction * sine + perpDirection * perpSine) * (intensity * decay);
+                cinemachineFollow.FollowOffset = baseOffset + shakeDelta;
+            }, ease: Ease.Linear).OnComplete(() =>
+            {
+                if (cinemachineFollow != null)
+                {
+                    Vector3 resetOffset = followOffset;
+                    resetOffset.y = cinemachineFollow.FollowOffset.y;
+                    cinemachineFollow.FollowOffset = resetOffset;
+                }
+            });
+        }
+
+        /// <summary>
+        /// General screen shake. Shakes via PrimeTween and Cinemachine Impulse simultaneously.
         /// </summary>
         public void Shake(float force = 1f)
         {
+            if (usePrimeTweenShake)
+            {
+                ShakePrimeTween(force * 0.35f, 0.16f, defaultShakeFrequency);
+            }
+
             if (impulseSource != null)
             {
                 impulseSource.GenerateImpulseWithForce(force);
@@ -196,10 +272,15 @@ namespace Woodsmen.CameraSystem
         }
 
         /// <summary>
-        /// Triggers a directional shake (e.g. impact recoil direction).
+        /// Directional screen shake.
         /// </summary>
         public void ShakeDirectional(Vector3 direction, float force = 1f)
         {
+            if (usePrimeTweenShake)
+            {
+                ShakePrimeTween(force * 0.35f, 0.16f, defaultShakeFrequency, direction);
+            }
+
             if (impulseSource != null)
             {
                 impulseSource.GenerateImpulseWithVelocity(direction.normalized * force);
@@ -207,36 +288,93 @@ namespace Woodsmen.CameraSystem
         }
 
         /// <summary>
-        /// Triggers a shake with distance falloff relative to the local player.
-        /// If a world event (e.g. tree crashing) occurs far away from the local player,
-        /// this prevents the camera from shaking inappropriately.
+        /// Triggered when the Lumberjack chops a tree.
+        /// Produces a snappy recoil punch away from the chopped tree.
+        /// Distance-attenuated to avoid shaking if the local player is far away.
         /// </summary>
-        public void ShakeAtPosition(Vector3 worldPosition, float force = 1f, float maxDistance = 15f)
+        public void ShakeTreeHit(Vector3 treeWorldPosition = default)
         {
-            if (_currentTarget == null || impulseSource == null) return;
+            Vector3 recoilDir = Vector3.zero;
+            float attenuation = 1f;
 
-            float distance = Vector3.Distance(worldPosition, _currentTarget.position);
-            if (distance >= maxDistance) return;
+            if (_currentTarget != null && treeWorldPosition != default)
+            {
+                float distance = Vector3.Distance(_currentTarget.position, treeWorldPosition);
+                if (distance > 15f) return; // Isolated from distant chops
 
-            // Linear distance attenuation (1.0 at epicenter to 0.0 at maxDistance)
-            float attenuation = 1f - (distance / maxDistance);
-            float attenuatedForce = force * attenuation;
+                attenuation = Mathf.Clamp01(1f - (distance / 15f));
+                recoilDir = (_currentTarget.position - treeWorldPosition).normalized;
+            }
 
-            if (attenuatedForce > 0.05f)
+            if (usePrimeTweenShake)
+            {
+                ShakePrimeTween(treeHitIntensity * attenuation, treeHitDuration, defaultShakeFrequency, recoilDir);
+            }
+
+            if (impulseSource != null)
+            {
+                impulseSource.GenerateImpulseWithForce(treeHitForce * attenuation);
+            }
+        }
+
+        /// <summary>
+        /// Triggered when a tree collapses to the ground.
+        /// Produces a heavier ground thud with distance attenuation.
+        /// </summary>
+        public void ShakeTreeFell(Vector3 treeWorldPosition)
+        {
+            if (_currentTarget == null) return;
+
+            float distance = Vector3.Distance(treeWorldPosition, _currentTarget.position);
+            if (distance >= 18f) return;
+
+            float attenuation = 1f - (distance / 18f);
+
+            if (usePrimeTweenShake)
+            {
+                ShakePrimeTween(treeFellIntensity * attenuation, treeFellDuration, 14, Vector3.forward);
+            }
+
+            if (impulseSource != null)
             {
                 impulseSource.GenerateImpulseAtPositionWithVelocity(
-                    worldPosition,
-                    Vector3.down * attenuatedForce
+                    treeWorldPosition,
+                    Vector3.down * (treeFellForce * attenuation)
                 );
             }
         }
 
-        // --- Standard Preset Helpers ---
+        /// <summary>
+        /// Triggered when the local player takes damage.
+        /// </summary>
+        public void ShakePlayerDamaged()
+        {
+            if (usePrimeTweenShake)
+            {
+                ShakePrimeTween(playerDamagedIntensity, 0.22f, 26);
+            }
 
-        public void ShakeTreeHit() => Shake(treeHitForce);
-        public void ShakeCombatHit() => Shake(combatHitForce);
-        public void ShakePlayerDamaged() => Shake(playerDamagedForce);
-        public void ShakeTreeFell(Vector3 treeWorldPosition) => ShakeAtPosition(treeWorldPosition, treeFellForce, 18f);
+            if (impulseSource != null)
+            {
+                impulseSource.GenerateImpulseWithForce(playerDamagedForce);
+            }
+        }
+
+        /// <summary>
+        /// Triggered on melee combat hits.
+        /// </summary>
+        public void ShakeCombatHit()
+        {
+            if (usePrimeTweenShake)
+            {
+                ShakePrimeTween(treeHitIntensity * 1.3f, 0.16f, defaultShakeFrequency);
+            }
+
+            if (impulseSource != null)
+            {
+                impulseSource.GenerateImpulseWithForce(combatHitForce);
+            }
+        }
 
         #endregion
 

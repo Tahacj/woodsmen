@@ -20,12 +20,14 @@ namespace Woodsmen.Players
         private const string LookActionName = "Look";
         private const string PrimaryActionName = "PrimaryAction";
         private const string SecondaryActionName = "SecondaryAction";
+        private const string InventoryActionName = "Inventory";
 
         private InputActionMap _actionMap;
         private InputAction _moveAction;
         private InputAction _lookAction;
         private InputAction _primaryAction;
         private InputAction _secondaryAction;
+        private InputAction _inventoryAction;
 
         private bool _isInitialized;
 
@@ -89,6 +91,10 @@ namespace Woodsmen.Players
         public event Action OnSecondaryActionStarted;
         public event Action OnSecondaryActionCanceled;
 
+        // Inventory action events (Tab / Gamepad Select)
+        public event Action OnInventoryActionTriggered;
+        public static event Action OnInventoryToggleRequested;
+
         private void Awake()
         {
             InitializeActions();
@@ -125,9 +131,18 @@ namespace Woodsmen.Players
                 {
                     _moveAction = _actionMap.FindAction(MoveActionName, false);
                     _lookAction = _actionMap.FindAction(LookActionName, false);
-                    _primaryAction = _actionMap.FindAction(PrimaryActionName, false);
-                    _secondaryAction = _actionMap.FindAction(SecondaryActionName, false);
+                    _primaryAction = _actionMap.FindAction(PrimaryActionName, false) ?? _actionMap.FindAction("AimPrimary", false);
+                    _secondaryAction = _actionMap.FindAction(SecondaryActionName, false) ?? _actionMap.FindAction("AimSecondary", false);
+                    _inventoryAction = _actionMap.FindAction(InventoryActionName, false);
                 }
+            }
+
+            // Ensure Inventory action exists on the map
+            if (_actionMap != null && _inventoryAction == null)
+            {
+                _inventoryAction = _actionMap.AddAction(InventoryActionName, InputActionType.Button);
+                _inventoryAction.AddBinding("<Keyboard>/tab");
+                _inventoryAction.AddBinding("<Gamepad>/select");
             }
 
             // Programmatic fallback if no asset or missing map
@@ -171,6 +186,11 @@ namespace Woodsmen.Players
             _secondaryAction = _actionMap.AddAction("SecondaryAction", InputActionType.Button);
             _secondaryAction.AddBinding("<Mouse>/rightButton");
             _secondaryAction.AddBinding("<Gamepad>/leftTrigger");
+
+            // Inventory Action: Tab / Gamepad Select
+            _inventoryAction = _actionMap.AddAction(InventoryActionName, InputActionType.Button);
+            _inventoryAction.AddBinding("<Keyboard>/tab");
+            _inventoryAction.AddBinding("<Gamepad>/select");
         }
 
         private void BindActionEvents()
@@ -197,6 +217,11 @@ namespace Woodsmen.Players
                 _secondaryAction.performed += OnSecondaryPerformed;
                 _secondaryAction.canceled += OnSecondaryCanceled;
             }
+
+            if (_inventoryAction != null)
+            {
+                _inventoryAction.performed += OnInventoryPerformed;
+            }
         }
 
         private void UnbindActions()
@@ -222,6 +247,11 @@ namespace Woodsmen.Players
             {
                 _secondaryAction.performed -= OnSecondaryPerformed;
                 _secondaryAction.canceled -= OnSecondaryCanceled;
+            }
+
+            if (_inventoryAction != null)
+            {
+                _inventoryAction.performed -= OnInventoryPerformed;
             }
         }
 
@@ -265,6 +295,17 @@ namespace Woodsmen.Players
         {
             IsSecondaryActionHeld = false;
             OnSecondaryActionCanceled?.Invoke();
+        }
+
+        public void TriggerInventoryToggle()
+        {
+            OnInventoryActionTriggered?.Invoke();
+            OnInventoryToggleRequested?.Invoke();
+        }
+
+        private void OnInventoryPerformed(InputAction.CallbackContext context)
+        {
+            TriggerInventoryToggle();
         }
     }
 }

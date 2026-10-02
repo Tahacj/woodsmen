@@ -41,6 +41,7 @@ namespace Woodsmen.Players
         [SerializeField] private float stepDistanceInterval = 1.6f;
         [SerializeField] private float pitchVariationMin = 0.9f;
         [SerializeField] private float pitchVariationMax = 1.1f;
+        [SerializeField] private bool showPerfMetrics = false;
 
         // Cached Animator parameter hashes (Zero string allocations)
         private static readonly int MoveXHash = Animator.StringToHash("MoveX");
@@ -53,6 +54,8 @@ namespace Woodsmen.Players
         private Animator _animator;
         private Camera _mainCamera;
         private CharacterHealth _characterHealth;
+        private Woodsmen.Combat.Weapons.ICombatController _combatController;
+        private WarriorCombat _warriorCombat;
 
         // Locomotion Runtime State
         private Vector3 _currentPlanarVelocity;
@@ -78,10 +81,27 @@ namespace Woodsmen.Players
                 _characterHealth = gameObject.AddComponent<CharacterHealth>();
             }
 
-            // Defensive Failsafe: Ensure primary action component (LumberjackChopping) is active
+            if (!gameObject.TryGetComponent(out Woodsmen.Inventory.PlayerInventory _))
+            {
+                gameObject.AddComponent<Woodsmen.Inventory.PlayerInventory>();
+            }
+
+            // Defensive Failsafe: Ensure primary action component (LumberjackChopping / PlayerCombatController) is active
             if (gameObject.name.Contains("Lumberjack") && !gameObject.TryGetComponent(out LumberjackChopping _))
             {
                 gameObject.AddComponent<LumberjackChopping>();
+            }
+            if (gameObject.name.Contains("Warrior"))
+            {
+                if (!gameObject.TryGetComponent(out _combatController) && !gameObject.TryGetComponent(out _warriorCombat))
+                {
+                    _combatController = gameObject.AddComponent<Woodsmen.Combat.Weapons.PlayerCombatController>();
+                }
+            }
+            else
+            {
+                gameObject.TryGetComponent(out _combatController);
+                gameObject.TryGetComponent(out _warriorCombat);
             }
 
             _mainCamera = Camera.main;
@@ -134,10 +154,27 @@ namespace Woodsmen.Players
 
             if (IsLocallyControlled)
             {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 HandleLocalMovement();
+                long tMove = sw.ElapsedTicks;
+
+                sw.Restart();
                 HandleLocalRotation();
+                long tRot = sw.ElapsedTicks;
+
+                sw.Restart();
                 UpdateLocalAnimations();
+                long tAnim = sw.ElapsedTicks;
+
+                sw.Restart();
                 ProcessStepEffects(_currentPlanarVelocity.magnitude);
+                long tStep = sw.ElapsedTicks;
+
+                if (showPerfMetrics && _currentPlanarVelocity.sqrMagnitude > 0.01f && Time.frameCount % 60 == 0)
+                {
+                    double tickToMs = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                    Debug.Log($"<color=#00ffff>[PERF Locomotion]</color> CC.Move: <b>{tMove * tickToMs:F3}ms</b> | Rot: <b>{tRot * tickToMs:F3}ms</b> | Anim: <b>{tAnim * tickToMs:F3}ms</b> | Step: <b>{tStep * tickToMs:F3}ms</b> | Frame: <b>{Time.deltaTime * 1000f:F1}ms</b> (<b>{1f / Mathf.Max(0.0001f, Time.deltaTime):F0} FPS</b>)");
+                }
             }
             else
             {
@@ -162,6 +199,17 @@ namespace Woodsmen.Players
             }
 
             Vector3 targetPlanarVelocity = targetDirection * moveSpeed;
+
+            // Attack weightiness: scale movement during weapon attacks
+            if (_combatController != null && _combatController.IsAttackActive)
+            {
+                targetPlanarVelocity *= _combatController.AttackMovementMultiplier;
+            }
+            else if (_warriorCombat != null && _warriorCombat.IsAttackActive)
+            {
+                targetPlanarVelocity *= _warriorCombat.AttackMovementMultiplier;
+            }
+
             float currentAccelRate = targetDirection.sqrMagnitude > 0.001f ? acceleration : deceleration;
 
             // Smooth code-driven acceleration (Zero Root Motion)
@@ -200,6 +248,14 @@ namespace Woodsmen.Players
         private void HandleLocalRotation()
         {
             bool isAiming = _inputReader != null && _inputReader.IsAiming;
+
+            // If pointer is over UI (e.g. inventory slots/buttons), don't aim towards UI clicks
+            if (isAiming && Woodsmen.Inventory.UI.UniversalInventoryUI.IsOpen &&
+                UnityEngine.EventSystems.EventSystem.current != null &&
+                UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            {
+                isAiming = false;
+            }
 
             if (isAiming)
             {

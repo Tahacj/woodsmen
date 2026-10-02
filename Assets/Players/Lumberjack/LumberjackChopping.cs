@@ -3,6 +3,7 @@ using Mirror;
 using UnityEngine;
 using Woodsmen.CameraSystem;
 using Woodsmen.Combat;
+using Woodsmen.Combat.Weapons;
 using Woodsmen.Environment;
 using Woodsmen.Utilities;
 
@@ -48,8 +49,18 @@ namespace Woodsmen.Players
         [Tooltip("Rotation offset relative to weaponTransform (useful for orienting Box hitboxes).")]
         [SerializeField] private Vector3 hitboxRotationOffset = Vector3.zero;
 
-        [Tooltip("Layer mask for interactable objects.")]
+        [Tooltip("Layer mask for interactable objects (trees, destructibles).")]
         [SerializeField] private LayerMask targetLayer = ~0;
+
+        [Header("Frostbite Rune (Unlocked via Shop)")]
+        [Tooltip("When true the axe can also strike enemies and apply frost.")]
+        [SerializeField] private bool canHitEnemies = false;
+
+        [Tooltip("Layer mask used to detect enemies (only active after Frostbite Rune is purchased).")]
+        [SerializeField] private LayerMask enemyTargetLayer = 0;
+
+        [Tooltip("Damage dealt to enemies per swing when Frostbite Rune is active (always 1 HP).")]
+        [SerializeField] private float frostbiteEnemyDamage = 1f;
 
         [Header("Hitbox Visualizer (Scene View)")]
         [Tooltip("Show live visual hitbox gizmo in Scene view.")]
@@ -89,6 +100,10 @@ namespace Woodsmen.Players
         private float _cooldownTimer;
         private readonly HashSet<int> _hitTreeIdsThisSwing = new HashSet<int>(8);
         private readonly Collider[] _overlapResults = new Collider[16];
+        private readonly Collider[] _enemyOverlapResults = new Collider[16];
+
+        // Frostbite Rune runtime state
+        private WeaponInfusion _frostbiteInfusion;
 
         private bool IsLocallyControlled => isLocalPlayer || (!NetworkClient.active && !NetworkServer.active);
 
@@ -165,6 +180,41 @@ namespace Woodsmen.Players
         public Transform WeaponTransform { get => weaponTransform; set => weaponTransform = value; }
         public WeaponHitbox CustomWeaponHitbox { get => customWeaponHitbox; set => customWeaponHitbox = value; }
         public LayerMask TargetLayer { get => targetLayer; set => targetLayer = value; }
+
+        /// <summary>
+        /// True when the Frostbite Rune has been purchased and the lumberjack can strike enemies.
+        /// </summary>
+        public bool CanHitEnemies => canHitEnemies;
+
+        /// <summary>
+        /// Called by WeaponInfusionAction when the Frostbite Rune is purchased.
+        /// Enables enemy hit detection and registers the frost infusion for on-hit effects.
+        /// If enemyTargetLayer is not configured in the Inspector the method falls back to
+        /// auto-detecting any layer named "Enemy" or "Enemies".
+        /// </summary>
+        public void EnableFrostbiteEnemyHit(WeaponInfusion infusion)
+        {
+            canHitEnemies = true;
+            _frostbiteInfusion = infusion;
+
+            // Auto-detect enemy layer if the designer left enemyTargetLayer at 0
+            if (enemyTargetLayer.value == 0)
+            {
+                int enemyLayer = LayerMask.NameToLayer("Enemy");
+                if (enemyLayer < 0) enemyLayer = LayerMask.NameToLayer("Enemies");
+                if (enemyLayer >= 0)
+                {
+                    enemyTargetLayer = 1 << enemyLayer;
+                }
+                else
+                {
+                    // Fallback: use the same mask as trees so anything IDamageable is detected
+                    enemyTargetLayer = targetLayer;
+                }
+            }
+
+            Debug.Log($"<color=#67e8f9><b>[LumberjackChopping]</b> Frostbite Rune activated! Enemies will take {frostbiteEnemyDamage} HP per swing and receive the Frost debuff.</color>");
+        }
 
         #endregion
 
@@ -250,6 +300,12 @@ namespace Woodsmen.Players
             // 4. Initiate new chop if requested and eligible
             bool isInputHeld = _inputReader != null && _inputReader.IsPrimaryActionHeld;
 
+            // If clicking on UI (e.g. inventory items or buttons), don't trigger axe swing
+            if (isInputHeld && UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            {
+                isInputHeld = false;
+            }
+
             if (isInputHeld && !_isChopActive && _cooldownTimer <= 0f)
             {
                 StartChopAction();
@@ -272,6 +328,15 @@ namespace Woodsmen.Players
                 _animator.SetInteger(ChopIndexHash, _currentChopIndex);
                 _animator.SetBool(IsCuttingHash, true);
             }
+
+            // Broadcast animation state to all other clients so they see the chopping animation
+            if (NetworkClient.active || NetworkServer.active)
+            {
+                if (isLocalPlayer)
+                    CmdSetChopState(true, _currentChopIndex);
+                else if (isServer)
+                    RpcReceiveChopState(true, _currentChopIndex);
+            }
         }
 
         private void EndChopAction()
@@ -292,6 +357,42 @@ namespace Woodsmen.Players
             {
                 _animator.SetBool(IsCuttingHash, false);
                 _animator.SetInteger(ChopIndexHash, _currentChopIndex);
+            }
+
+            // Broadcast animation stop to all other clients
+            if (NetworkClient.active || NetworkServer.active)
+            {
+                if (isLocalPlayer)
+                    CmdSetChopState(false, _currentChopIndex);
+                else if (isServer)
+                    RpcReceiveChopState(false, _currentChopIndex);
+            }
+        }
+
+        /// <summary>
+        /// Client asks the server to relay the chop animation state to all peers.
+        /// </summary>
+        [Command]
+        private void CmdSetChopState(bool isCutting, int chopIndex)
+        {
+            RpcReceiveChopState(isCutting, chopIndex);
+        }
+
+        /// <summary>
+        /// Server broadcasts the chop animation state to all clients.
+        /// The local player skips this because they already applied it directly.
+        /// </summary>
+        [ClientRpc]
+        private void RpcReceiveChopState(bool isCutting, int chopIndex)
+        {
+            // Skip on the locally controlled player – already handled in StartChopAction/EndChopAction
+            if (isLocalPlayer) return;
+
+            if (_animator == null) EnsureDependencies();
+            if (_animator != null)
+            {
+                _animator.SetInteger(ChopIndexHash, chopIndex);
+                _animator.SetBool(IsCuttingHash, isCutting);
             }
         }
 
@@ -384,8 +485,8 @@ namespace Woodsmen.Players
 
                 if (col.TryGetComponentInParent(out IDamageable target))
                 {
-                    // Avoid self-damage
-                    if (target is Component comp && (comp.gameObject == gameObject || comp.transform.IsChildOf(transform)))
+                    // Tree pass only affects trees / environment objects, never players or teammates
+                    if (target is CharacterHealth || IsTeammateOrSelf(col, target))
                     {
                         continue;
                     }
@@ -403,9 +504,106 @@ namespace Woodsmen.Players
 
                     target.TakeDamage(chopDamage, contactPoint, hitDirection, gameObject);
 
+                    var infusion = GetComponentInChildren<WeaponInfusion>() ??
+                                   GetComponent<WeaponInfusion>();
+                    if (infusion != null)
+                    {
+                        infusion.OnWeaponHit(target, contactPoint, hitDirection, gameObject);
+                    }
+
                     Debug.Log($"[Woodsmen] Lumberjack struck target: {(target as Component)?.gameObject.name}");
                 }
             }
+
+            // ── Frostbite Rune: enemy hit pass ─────────────────────────────────
+            if (!canHitEnemies) return;
+
+            int enemyHitCount = 0;
+            if (customWeaponHitbox != null)
+            {
+                // Temporarily swap the hitbox layer mask to detect enemies
+                LayerMask originalMask = customWeaponHitbox.TargetLayer;
+                customWeaponHitbox.TargetLayer = enemyTargetLayer;
+                enemyHitCount = customWeaponHitbox.CheckOverlap(_enemyOverlapResults);
+                customWeaponHitbox.TargetLayer = originalMask;
+            }
+            else
+            {
+                Transform origin = weaponTransform != null ? weaponTransform : transform;
+                Vector3 enemyCenter = origin.TransformPoint(hitboxCenterOffset);
+                Quaternion enemyRot = origin.rotation * Quaternion.Euler(hitboxRotationOffset);
+
+                if (hitboxShape == HitboxShape.Sphere)
+                    enemyHitCount = Physics.OverlapSphereNonAlloc(enemyCenter, hitboxRadius, _enemyOverlapResults, enemyTargetLayer);
+                else
+                    enemyHitCount = Physics.OverlapBoxNonAlloc(enemyCenter, hitboxBoxSize * 0.5f, _enemyOverlapResults, enemyRot, enemyTargetLayer);
+            }
+
+            for (int i = 0; i < enemyHitCount; i++)
+            {
+                Collider col = _enemyOverlapResults[i];
+                if (col == null || col.gameObject == gameObject) continue;
+
+                if (!col.TryGetComponentInParent(out IDamageable enemy)) continue;
+
+                // Never hit teammates or self with frostbite
+                if (IsTeammateOrSelf(col, enemy)) continue;
+
+                int enemyId = (enemy as Component)?.GetInstanceID() ?? col.GetInstanceID();
+                if (_hitTreeIdsThisSwing.Contains(enemyId)) continue;
+
+                _hitTreeIdsThisSwing.Add(enemyId);
+
+                Vector3 contactPoint = col.ClosestPoint(hitCenter);
+                Vector3 hitDir = (col.transform.position - transform.position).normalized;
+
+                // 1 HP frostbite hit
+                enemy.TakeDamage(frostbiteEnemyDamage, contactPoint, hitDir, gameObject);
+
+                // Apply frost debuff via WeaponInfusion pipeline
+                if (_frostbiteInfusion != null)
+                {
+                    _frostbiteInfusion.OnWeaponHit(enemy, contactPoint, hitDir, gameObject);
+                }
+
+                Debug.Log($"<color=#67e8f9>[LumberjackChopping] Frostbite hit on {(enemy as Component)?.gameObject.name} for {frostbiteEnemyDamage} HP + Frost debuff!</color>");
+            }
+        }
+
+        /// <summary>
+        /// Identifies whether a target collider or damageable belongs to the local player, a teammate, or another player.
+        /// Prevents friendly fire across all player classes.
+        /// </summary>
+        private bool IsTeammateOrSelf(Collider col, IDamageable target)
+        {
+            if (col == null) return true;
+            GameObject colGo = col.gameObject;
+
+            // Self check
+            if (colGo == gameObject || col.transform.IsChildOf(transform)) return true;
+            if (target is Component comp && (comp.gameObject == gameObject || comp.transform.IsChildOf(transform))) return true;
+
+            // Player layer check
+            int playerLayer = LayerMask.NameToLayer("Player");
+            if (playerLayer != -1)
+            {
+                if (colGo.layer == playerLayer || (target is Component c && c.gameObject.layer == playerLayer))
+                    return true;
+            }
+
+            // Player tag check
+            if (colGo.CompareTag("Player") || (target is Component cTag && cTag.CompareTag("Player")))
+                return true;
+
+            // Player controller components (Warrior / LocomotionController / ICombatController)
+            if (col.GetComponentInParent<LocomotionController>() != null ||
+                col.GetComponentInParent<ICombatController>() != null ||
+                col.GetComponentInParent<LumberjackChopping>() != null)
+            {
+                return true;
+            }
+
+            return false;
         }
 
         #endregion

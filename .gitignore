@@ -112,3 +112,10 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# Unity Profiler Captures
+ProfilerCaptures/
+*.data
+
+# Unity Profiler Capture data (large binary files)
+ProfilerCaptures/

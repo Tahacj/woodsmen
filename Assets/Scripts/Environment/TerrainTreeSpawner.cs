@@ -3,6 +3,7 @@ using UnityEngine;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
+using Mirror;
 
 namespace Woodsmen.Environment
 {
@@ -12,7 +13,7 @@ namespace Woodsmen.Environment
     /// Supports both baked scene generation (Editor) and procedural generation (Runtime).
     /// </summary>
     [ExecuteAlways]
-    public class TerrainTreeSpawner : MonoBehaviour
+    public class TerrainTreeSpawner : NetworkBehaviour
     {
         [Header("Target Terrain")]
         [Tooltip("The terrain to spawn trees on. If unassigned, automatically detects Terrain on this GameObject or in the scene.")]
@@ -61,6 +62,10 @@ namespace Woodsmen.Environment
         [Tooltip("If true, automatically spawns trees at scene start/awake. If false, relies on baked editor trees.")]
         [SerializeField] private bool spawnOnStart = false;
 
+        [Header("Network Synchronization")]
+        [Tooltip("Synchronized seed distributed from the Server to all Clients to guarantee identical forests.")]
+        [SyncVar] private int _syncedSeed;
+
         public int TreeCount
         {
             get => treeCount;
@@ -81,8 +86,32 @@ namespace Woodsmen.Environment
         {
             EnsureTerrainReference();
 
-            if (Application.isPlaying && spawnOnStart)
+            // In Editor edit-mode only, if we need to auto-generate (rare, usually manual bake)
+            if (!Application.isPlaying && spawnOnStart)
             {
+                GenerateTrees();
+            }
+        }
+
+        public override void OnStartServer()
+        {
+            base.OnStartServer();
+            if (spawnOnStart)
+            {
+                // Generate a fresh seed for this play session
+                _syncedSeed = Random.Range(1, 999999);
+                seed = _syncedSeed;
+                GenerateTrees();
+            }
+        }
+
+        public override void OnStartClient()
+        {
+            base.OnStartClient();
+            if (spawnOnStart && !isServer)
+            {
+                // Clients receive the exact same seed from the server
+                seed = _syncedSeed;
                 GenerateTrees();
             }
         }

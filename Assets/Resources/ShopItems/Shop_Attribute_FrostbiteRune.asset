@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2d3e4f5a6b10718293a4b5c6d7e8f98, type: 3}
+  m_Name: Shop_Attribute_FrostbiteRune
+  m_EditorClassIdentifier: 
+  id: frost_rune
+  displayName: Frostbite Rune
+  category: 1
+  targetRole: 1
+  description: Ancient chilling rune that freezes enemy blood, reducing enemy movement
+    speed by 25% on strike.
+  icon: {fileID: 21300000, guid: 21ef3c33e9cb279478878b4c4328ff77, type: 3}
+  woodPrice: 20
+  coinPrice: 35
+  action: {fileID: 11400000, guid: d1000000000000000000000000000001, type: 2}

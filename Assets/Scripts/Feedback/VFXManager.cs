@@ -74,11 +74,11 @@ namespace Woodsmen.Feedback
             if (woodImpactPrefab == null)
             {
 #if UNITY_EDITOR
-                woodImpactPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Players/Lumberjack/FX_Impact_Wood_Ztest 8.prefab");
+                woodImpactPrefab = UnityEditor.AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Resources/VFX/FX_Impact_Wood_Ztest 8.prefab");
 #endif
                 if (woodImpactPrefab == null)
                 {
-                    woodImpactPrefab = Resources.Load<GameObject>("FX_Impact_Wood_Ztest 8");
+                    woodImpactPrefab = Resources.Load<GameObject>("VFX/FX_Impact_Wood_Ztest 8");
                 }
             }
 

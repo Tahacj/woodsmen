@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a1b2c3d4e5f60718293a4b5c6d7e8fa1, type: 3}
+  m_Name: Action_Attribute_FireInfusion
+  m_EditorClassIdentifier: 
+  infusionType: 1
+  bonusDamage: 15
+  effectDuration: 3.5
+  burnTickDamage: 5
+  slowStrength: 0
+  weaponAuraVfxPrefab: {fileID: 0}
+  targetHitVfxPrefab: {fileID: 1809022330002312, guid: ed511b7776af6174e9b1255c7a81e59c, type: 3}
+  enemyBurnVfxPrefab: {fileID: 1151502900046148, guid: d5e400a2a0d155d4db9970614680534f, type: 3}
+  summary: +15 Fire Damage & Burning On-Hit

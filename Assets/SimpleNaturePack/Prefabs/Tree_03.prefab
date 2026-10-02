@@ -198,7 +198,7 @@ BoxCollider:
   m_LayerOverridePriority: 0
   m_IsTrigger: 0
   m_ProvidesContacts: 0
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 3
   m_Size: {x: 1, y: 4.950701, z: 1}
   m_Center: {x: 0, y: 2.4756033, z: 0}
@@ -298,7 +298,7 @@ NavMeshObstacle:
   m_Extents: {x: 0.5, y: 0.5, z: 0.5}
   m_MoveThreshold: 0.1
   m_Carve: 1
-  m_CarveOnlyStationary: 0
+  m_CarveOnlyStationary: 1
   m_Center: {x: 0, y: 0, z: 0}
   m_TimeToStationary: 0.5
 --- !u!114 &8683105478177794680
@@ -315,10 +315,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Woodsmen.Environment.DestructibleTree
   maxHealth: 100
   currentHealth: 100
+  hitDebounceTime: 0.15
   stumpPrefab: {fileID: 108507113624723981, guid: eebb56c82efbd8d4bb0eb6bd925a0e9d, type: 3}
-  woodResourceAmount: 5
-  punchScale: {x: 0.12, y: -0.08, z: 0.12}
-  punchDuration: 0.25
+  minWoodDrop: 2
+  maxWoodDrop: 4
+  punchScale: {x: 0.12, y: -0.1, z: 0.12}
+  punchDuration: 0.35
   woodChipsParticle: {fileID: 0}
   audioSource: {fileID: 0}
   chopAudioClips: []
