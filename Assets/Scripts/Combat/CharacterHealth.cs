@@ -206,14 +206,14 @@ namespace Woodsmen.Combat
             else if (!NetworkClient.active && !NetworkServer.active)
             {
                 // Offline / Standalone Testing Mode (Rule 3)
-                float finalDamage = Mathf.Max(1f, damage - defense);
-                _currentHealth = Mathf.Max(0f, _currentHealth - finalDamage);
+                float finalDamage = Mathf.Round(Mathf.Max(1f, damage - defense));
+                _currentHealth = Mathf.Round(Mathf.Max(0f, _currentHealth - finalDamage));
 
                 PlayHitFeedback(finalDamage, hitPoint, hitDirection);
                 OnDamaged?.Invoke(finalDamage, hitPoint, hitDirection);
                 OnHealthChanged?.Invoke(_currentHealth, maxHealth);
 
-                if (_currentHealth <= 0f)
+                if (_currentHealth <= 0.001f)
                 {
                     _isDead = true;
                     HandleDeath(hitDirection);
@@ -227,13 +227,13 @@ namespace Woodsmen.Combat
         {
             if (_isDead || _isInvulnerable) return;
 
-            float finalDamage = Mathf.Max(1f, damage - defense);
-            _currentHealth = Mathf.Max(0f, _currentHealth - finalDamage);
+            float finalDamage = Mathf.Round(Mathf.Max(1f, damage - defense));
+            _currentHealth = Mathf.Round(Mathf.Max(0f, _currentHealth - finalDamage));
 
             // Notify all clients of the hit event
             RpcOnDamaged(finalDamage, hitPoint, hitDirection);
 
-            if (_currentHealth <= 0f)
+            if (_currentHealth <= 0.001f)
             {
                 _isDead = true;
                 RpcOnDeath(hitDirection);
@@ -449,19 +449,21 @@ namespace Woodsmen.Combat
         public void Heal(float amount)
         {
             if (_isDead || amount <= 0f) return;
+            
+            float roundAmount = Mathf.Round(amount);
 
             if (isServer)
             {
-                _currentHealth = Mathf.Min(maxHealth, _currentHealth + amount);
+                _currentHealth = Mathf.Round(Mathf.Min(maxHealth, _currentHealth + roundAmount));
             }
             else if (!NetworkClient.active && !NetworkServer.active)
             {
-                _currentHealth = Mathf.Min(maxHealth, _currentHealth + amount);
+                _currentHealth = Mathf.Round(Mathf.Min(maxHealth, _currentHealth + roundAmount));
                 OnHealthChanged?.Invoke(_currentHealth, maxHealth);
             }
             else if (isLocalPlayer)
             {
-                CmdHeal(amount);
+                CmdHeal(roundAmount);
             }
         }
 
@@ -469,16 +471,16 @@ namespace Woodsmen.Combat
         private void CmdHeal(float amount)
         {
             if (_isDead || amount <= 0f) return;
-            _currentHealth = Mathf.Min(maxHealth, _currentHealth + amount);
+            _currentHealth = Mathf.Round(Mathf.Min(maxHealth, _currentHealth + Mathf.Round(amount)));
         }
 
         /// <summary>
-        /// Revives the character from death with a percentage of max health.
+        /// Revives the character from death with a flat amount of health.
         /// </summary>
-        public void Revive(float healthPercent = 1.0f)
+        public void Revive(float flatHealthAmount = 15f)
         {
             _isDead = false;
-            _currentHealth = Mathf.Clamp(maxHealth * healthPercent, 1f, maxHealth);
+            _currentHealth = Mathf.Round(Mathf.Clamp(flatHealthAmount, 1f, maxHealth));
 
             HandleRevive();
             OnHealthChanged?.Invoke(_currentHealth, maxHealth);
