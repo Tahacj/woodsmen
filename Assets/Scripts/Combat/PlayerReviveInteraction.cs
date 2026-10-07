@@ -19,8 +19,8 @@ namespace Woodsmen.Combat
         [Header("Revive Settings")]
         [Tooltip("How close you need to be to revive a dead player.")]
         [SerializeField] private float reviveRange = 3.5f;
-        [Tooltip("The percentage of MaxHealth the player will revive with (e.g., 0.15 for 15%).")]
-        [SerializeField] private float reviveHealthPercent = 0.15f;
+        [Tooltip("The flat amount of health points the player will revive with (e.g., 15).")]
+        [SerializeField] private float reviveHealthAmount = 15f;
 
         private CharacterHealth _myHealth;
         private CharacterHealth _targetDeadPlayer;
@@ -36,11 +36,18 @@ namespace Woodsmen.Combat
             // Only the local player calculates interactions for themselves
             if (!isLocalPlayer) return;
 
-            // If we are dead, we can't revive anyone
+            // If we are dead, we can't revive anyone else, but we CAN self-respawn
             if (_myHealth.IsDead)
             {
-                if (_isPromptShowing)
+                if (!_isPromptShowing)
                 {
+                    InteractionPromptUI.Instance?.Show("[E] Respawn");
+                    _isPromptShowing = true;
+                }
+
+                if (WasInteractPressed())
+                {
+                    CmdSelfRespawn();
                     _isPromptShowing = false;
                     InteractionPromptUI.Instance?.Hide();
                 }
@@ -61,7 +68,7 @@ namespace Woodsmen.Combat
 
                 if (WasInteractPressed())
                 {
-                    CmdRevivePlayer(_targetDeadPlayer.gameObject, reviveHealthPercent);
+                    CmdRevivePlayer(_targetDeadPlayer.gameObject, reviveHealthAmount);
                     _isPromptShowing = false;
                     InteractionPromptUI.Instance?.Hide();
                     _targetDeadPlayer = null; // Clear immediately so we don't spam commands
@@ -106,7 +113,7 @@ namespace Woodsmen.Combat
         }
 
         [Command]
-        private void CmdRevivePlayer(GameObject targetPlayerObj, float percent)
+        private void CmdRevivePlayer(GameObject targetPlayerObj, float amount)
         {
             if (targetPlayerObj == null) return;
             
@@ -114,8 +121,47 @@ namespace Woodsmen.Combat
             // Verify they are still dead on the server before reviving
             if (health != null && health.IsDead)
             {
-                health.Revive(percent);
+                health.Revive(amount);
             }
+        }
+
+        [Command]
+        private void CmdSelfRespawn()
+        {
+            if (!_myHealth.IsDead) return;
+
+            // 1. Find a spawn point
+            Transform spawnPoint = null;
+            var spawns = FindObjectsByType<Networking.PlayerSpawnPoint>(FindObjectsSortMode.None);
+            if (spawns.Length > 0)
+            {
+                // Pick a random spawn point to avoid players stacking on one spot
+                spawnPoint = spawns[UnityEngine.Random.Range(0, spawns.Length)].transform;
+            }
+
+            Vector3 targetPos = spawnPoint != null ? spawnPoint.position : Vector3.zero;
+            Quaternion targetRot = spawnPoint != null ? spawnPoint.rotation : Quaternion.identity;
+
+            // 2. Snap position on all clients BEFORE reviving
+            RpcTeleport(targetPos, targetRot);
+
+            // 3. Revive with full health
+            _myHealth.Revive(_myHealth.MaxHealth);
+        }
+
+        [ClientRpc]
+        private void RpcTeleport(Vector3 position, Quaternion rotation)
+        {
+            // Disable physics components temporarily so we can teleport cleanly
+            if (TryGetComponent(out CharacterController cc)) cc.enabled = false;
+            if (TryGetComponent(out UnityEngine.AI.NavMeshAgent nav)) nav.enabled = false;
+
+            transform.SetPositionAndRotation(position, rotation);
+
+            // Re-enable immediately. This prevents a race condition where the Revive RPC arrives 
+            // before the Teleport RPC, leaving LocomotionController active while CharacterController is dead.
+            if (cc != null) cc.enabled = true;
+            if (nav != null) nav.enabled = true;
         }
 
         private bool WasInteractPressed()

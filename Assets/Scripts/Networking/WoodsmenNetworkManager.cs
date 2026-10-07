@@ -675,13 +675,16 @@ namespace Woodsmen.Networking
                 base.OnClientDisconnect();
                 Debug.Log("[WoodsmenNetworkManager] Client disconnected.");
                 WoodsmenLobbyPlayer.ResetLobbyData();
+
                 if (MainMenuManager.Instance.IsNotNull())
                 {
                     MainMenuManager.Instance.ReturnToMainMenu();
                 }
                 else
                 {
-                    // MainMenuManager not active
+                    // Fallback: If disconnected while in Gameplay Scene,
+                    // MainMenuManager does not exist, so manually load the Main Menu scene.
+                    UnityEngine.SceneManagement.SceneManager.LoadScene("Main Menu");
                 }
             }
             catch (Exception ex)
