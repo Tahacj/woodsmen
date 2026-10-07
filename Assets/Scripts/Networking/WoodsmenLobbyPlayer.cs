@@ -97,6 +97,7 @@ namespace Woodsmen.Networking
             else
             {
                 selectedClass = GetAvailableClass();
+                isReady = true;
             }
 
             int playerNumber = AllPlayers.Count;
@@ -240,6 +241,7 @@ namespace Woodsmen.Networking
             }
 
             selectedClass = newClass;
+            isReady = true;
             Debug.Log($"[WoodsmenLobbyPlayer] Player {playerName} selected class: {newClass}");
         }
 

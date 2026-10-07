@@ -3,6 +3,10 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using Woodsmen.Networking;
+using JustAGame;
+using JustAGame.Core.Platform;
+using JustAGame.Core.Network;
+using JustAGame.Pooling;
 #if PRIMETWEEN_INSTALLED || UNITY_EDITOR
 using PrimeTween;
 #endif
@@ -73,43 +77,73 @@ namespace Woodsmen.UI
         }
 
         /// <summary>
-        /// Ensures NetworkManager GameObject exists in the scene with UnityRelayTransport,
-        /// WoodsmenRelayManager, and WoodsmenNetworkManager.
+        /// Ensures NetworkManager and EOSManager exist in the scene.
         /// </summary>
         public static void EnsureNetworkManagerExists()
         {
-            if (WoodsmenRelayManager.Instance != null && WoodsmenNetworkManager.Instance != null)
-                return;
-
-            GameObject nmGo = GameObject.Find("NetworkManager");
-            if (nmGo == null)
+            try
             {
-                var prefab = Resources.Load<GameObject>("Network/NetworkManager");
-                if (prefab != null)
+                if (WoodsmenNetworkManager.Instance != null && EOSNetworkManagerBridge.Instance != null)
                 {
-                    nmGo = Instantiate(prefab);
-                    nmGo.name = "NetworkManager";
-                    Debug.Log("[MainMenuManager] Instantiated NetworkManager from Resources/Network/NetworkManager.");
                     return;
                 }
 
-                nmGo = new GameObject("NetworkManager");
+                GameObject nmGo = GameObject.Find("NetworkManager");
+                if (nmGo == null)
+                {
+                    var prefab = Resources.Load<GameObject>("Network/NetworkManager");
+                    if (prefab != null)
+                    {
+                        nmGo = Instantiate(prefab);
+                        nmGo.name = "NetworkManager";
+                        Debug.Log("[MainMenuManager] Instantiated NetworkManager from Resources/Network/NetworkManager.");
+                    }
+                    else
+                    {
+                        nmGo = new GameObject("NetworkManager");
+                    }
+                }
+
+                nmGo.transform.SetParent(null);
+                DontDestroyOnLoad(nmGo);
+                var netMan = nmGo.GetComponent<WoodsmenNetworkManager>();
+                if (netMan == null) netMan = nmGo.AddComponent<WoodsmenNetworkManager>();
+
+                netMan.dontDestroyOnLoad = true;
+                netMan.runInBackground = true;
+                netMan.EnsurePrefabsAssigned();
+
+                // Ensure EOSManager exists if not already present
+                if (EOSNetworkManagerBridge.Instance == null)
+                {
+                    var existingEos = GameObject.Find("EOSManager");
+                    if (existingEos != null)
+                    {
+                        existingEos.transform.SetParent(null);
+                        DontDestroyOnLoad(existingEos);
+                        var bridge = existingEos.GetComponent<EOSNetworkManagerBridge>();
+                        if (bridge != null) bridge.ResolveReferences();
+                    }
+                    else
+                    {
+                        var eosPrefab = Resources.Load<GameObject>("Network/EOSManager");
+                        if (eosPrefab != null)
+                        {
+                            var eosGo = Instantiate(eosPrefab);
+                            eosGo.name = "EOSManager";
+                            eosGo.transform.SetParent(null);
+                            DontDestroyOnLoad(eosGo);
+                            Debug.Log("[MainMenuManager] Instantiated EOSManager from Resources/Network/EOSManager.");
+                        }
+                    }
+                }
+
+                Debug.Log("[MainMenuManager] Validated network infrastructure in scene.");
             }
-
-            var transport = nmGo.GetComponent<UnityRelayTransport>();
-            if (transport == null) transport = nmGo.AddComponent<UnityRelayTransport>();
-
-            var relayManager = nmGo.GetComponent<WoodsmenRelayManager>();
-            if (relayManager == null) relayManager = nmGo.AddComponent<WoodsmenRelayManager>();
-
-            var netMan = nmGo.GetComponent<WoodsmenNetworkManager>();
-            if (netMan == null) netMan = nmGo.AddComponent<WoodsmenNetworkManager>();
-
-            netMan.transport = transport;
-            netMan.dontDestroyOnLoad = true;
-            netMan.runInBackground = true;
-            netMan.EnsurePrefabsAssigned();
-            Debug.Log("[MainMenuManager] Dynamically initialized NetworkManager components in scene.");
+            catch (Exception ex)
+            {
+                Debug.LogError($"[MainMenuManager] Exception in EnsureNetworkManagerExists: {ex.Message}");
+            }
         }
 
         private void AutoDiscoverReferencesIfMissing()
@@ -572,9 +606,9 @@ namespace Woodsmen.UI
 
                 WoodsmenLobbyPlayer.ResetLobbyData();
 
-                if (WoodsmenRelayManager.Instance != null)
+                if (GamePlatform.Network != null)
                 {
-                    WoodsmenRelayManager.Instance.LeaveRoom();
+                    GamePlatform.Network.StopSession();
                 }
 
                 OnLeaveRoomClicked?.Invoke();
@@ -585,7 +619,7 @@ namespace Woodsmen.UI
             }
         }
 
-        private void SetMainButtonsVisibility(bool visible)
+        public void SetMainButtonsVisibility(bool visible)
         {
             if (mainMenuButtonsGroup != null)
             {
@@ -854,12 +888,18 @@ namespace Woodsmen.UI
                 string finalRoomCode = null;
                 string createError = null;
 
-                if (WoodsmenRelayManager.Instance != null)
+                if (GamePlatform.NetworkManager != null)
                 {
-                    ShowCreateStatus("CONNECTING TO CLOUD...");
-                    var result = await WoodsmenRelayManager.Instance.CreateRelayRoomAsync();
-                    finalRoomCode = result.code;
-                    createError = result.error;
+                    ShowCreateStatus("STARTING EOS REMOTE HOST...");
+                    NetworkStartResult result = await GamePlatform.NetworkManager.StartRemote();
+                    if (result == NetworkStartResult.Success)
+                    {
+                        finalRoomCode = GamePlatform.NetworkManager.GetCode();
+                    }
+                    else
+                    {
+                        createError = $"FAILED TO CREATE EOS ROOM: {result}";
+                    }
                 }
                 else if (WoodsmenNetworkManager.Instance != null)
                 {
@@ -878,7 +918,7 @@ namespace Woodsmen.UI
                     return;
                 }
 
-                // Successfully allocated Relay room! Open Lobby Room Window
+                // Successfully allocated room! Open Lobby Room Window
                 ClearAllFeedback();
                 ShowLobbyRoomWindow();
 
@@ -907,7 +947,7 @@ namespace Woodsmen.UI
             _isJoiningRoom = true;
             try
             {
-                string code = joinCodeInputField != null ? joinCodeInputField.text.Trim().ToUpperInvariant() : string.Empty;
+                string code = joinCodeInputField != null ? joinCodeInputField.text.Trim() : string.Empty;
                 if (string.IsNullOrEmpty(code))
                 {
                     Debug.LogWarning("[MainMenuManager] Cannot join room: invitation code is empty.");
@@ -915,9 +955,13 @@ namespace Woodsmen.UI
                     return;
                 }
 
-                if (code.Length < 6 && code != "LOCAL" && code != "LOCALHOST")
+                bool isLocal = code.Equals("LOCAL", StringComparison.OrdinalIgnoreCase) ||
+                               code.Equals("LOCALHOST", StringComparison.OrdinalIgnoreCase) ||
+                               code.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase);
+
+                if (!isLocal && code.Length != 32)
                 {
-                    ShowJoinError("CODE MUST BE 6 CHARACTERS");
+                    ShowJoinError("EOS CODE MUST BE 32 CHARACTERS (PUID)");
                     return;
                 }
 
@@ -934,19 +978,35 @@ namespace Woodsmen.UI
                 bool success = false;
                 string error = null;
 
-                if (WoodsmenRelayManager.Instance != null)
+                if (isLocal)
                 {
-                    var result = await WoodsmenRelayManager.Instance.JoinRelayRoomAsync(code);
-                    success = result.success;
-                    error = result.error;
-                }
-                else if (code == "LOCAL" || code == "LOCALHOST")
-                {
-                    if (WoodsmenNetworkManager.Instance != null)
+                    if (GamePlatform.NetworkManager != null)
+                    {
+                        GamePlatform.NetworkManager.ConnectLocal("localhost");
+                        success = true;
+                    }
+                    else if (WoodsmenNetworkManager.Instance != null)
                     {
                         WoodsmenNetworkManager.Instance.HandleJoinRoom(code);
                         success = true;
                     }
+                }
+                else if (GamePlatform.NetworkManager != null)
+                {
+                    NetworkStartResult result = await GamePlatform.NetworkManager.JoinRemote(code);
+                    if (result == NetworkStartResult.Success)
+                    {
+                        success = true;
+                    }
+                    else
+                    {
+                        error = $"FAILED TO JOIN EOS ROOM: {result}";
+                    }
+                }
+                else if (WoodsmenNetworkManager.Instance != null)
+                {
+                    WoodsmenNetworkManager.Instance.HandleJoinRoom(code);
+                    success = true;
                 }
 
                 SetModalButtonsInteractable(true);

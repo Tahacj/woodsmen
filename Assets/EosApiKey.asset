@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2006c7a2843279e4598781ed39185dd0, type: 3}
+  m_Name: EosApiKey
+  m_EditorClassIdentifier: Mirror.Transports::EosApiKey
+  epicProductName: JAV Vn Test
+  epicProductVersion: 1.0
+  epicProductId: 54ee559bda854761be7e4682b1e18e84
+  epicSandboxId: 81ee7cb2107149e3bb03020e4159f46a
+  epicDeploymentId: 44b903e68b3d40f3b88fcfc7c22d8eff
+  epicClientId: xyza7891pedbfYqiFsM3RazIrhyUadF3
+  epicClientSecret: qcOPHjn9HerJYusMj3+fgTJXoKDKKrzas2vgicT7b6k

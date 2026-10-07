@@ -1,0 +1,131 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5000000000000000001
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5000000000000000002}
+  - component: {fileID: 5000000000000000003}
+  - component: {fileID: 5000000000000000004}
+  - component: {fileID: 5000000000000000005}
+  - component: {fileID: 5000000000000000006}
+  - component: {fileID: 5000000000000000007}
+  m_Layer: 0
+  m_Name: EOSManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5000000000000000002
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5000000000000000001}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &5000000000000000003
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5000000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 09c2b9adb023e6547aa45a0e8bf5fcfc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Mirror.Transports::EpicTransport.EOSSDKComponent
+  apiKeys: {fileID: 11400000, guid: 2145b57daad81b64d85daea1cb39b9dd, type: 2}
+  authInterfaceLogin: 0
+  authInterfaceCredentialType: 6
+  devAuthToolPort: 7878
+  devAuthToolCredentialName: 
+  connectInterfaceCredentialType: 10
+  deviceModel: PC Windows 64bit
+  displayName: User
+  epicLoggerLevel: 200
+  collectPlayerMetrics: 1
+  checkForEpicLauncherAndRestart: 0
+  delayedInitialization: 1
+  platformTickIntervalInSeconds: 0
+  tickBudgetInMilliseconds: 0
+--- !u!114 &5000000000000000004
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5000000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f5f2d307354f3ea49b3ea12e6763a9fe, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Mirror.Transports::EpicTransport.EosTransport
+  Channels: 0200000000000000
+  timeout: 25
+  maxFragments: 55
+  ignoreCachedMessagesAtStartUpInSeconds: 2
+  relayControl: 1
+--- !u!114 &5000000000000000005
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5000000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0f112429f3acdc64bae9f662485d4bfa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JustAGame.Core.Network::JustAGame.Core.Network.EOSNetworkAuthenticator
+  OnServerAuthenticated:
+    m_PersistentCalls:
+      m_Calls: []
+  OnClientAuthenticated:
+    m_PersistentCalls:
+      m_Calls: []
+--- !u!114 &5000000000000000006
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5000000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a6c00a722c971e34d9f69f8298927fbc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JustAGame.Core.Network::JustAGame.Core.Network.EOSNetworkManagerBridge
+  networkManager: {fileID: 0}
+  eosTransport: {fileID: 5000000000000000004}
+  authenticator: {fileID: 5000000000000000005}
+  useActiveWhitelist: 0
+--- !u!114 &5000000000000000007
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5000000000000000001}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dde47ffbc4d068f4694ba14cfd09d75f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: JustAGame.UI::JustAGame.UI.EOSNetworkHUD
+  showHUD: 0
+  offsetX: 15
+  offsetY: 15
+  panelWidth: 320
